@@ -1,0 +1,39 @@
+name: Synthetic review
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+jobs:
+  review:
+    if: github.repository == 'beardfaceguy/pr-review-sandbox' && (github.event_name == 'pull_request_target' || (github.event.issue.pull_request && github.event.comment.user.id == 6148554))
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Review only the fixed synthetic fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo=beardfaceguy/pr-review-sandbox
+          n=$(jq -er '.pull_request.number // .issue.number' "$GITHUB_EVENT_PATH")
+          [[ $n =~ ^[1-9][0-9]*$ ]]
+          pr=$(gh api "repos/$repo/pulls/$n")
+          jq -e --arg repo "$repo" '.state == "open" and .base.ref == "main" and .head.repo.full_name == $repo and .user.id == 6148554' <<<"$pr" >/dev/null || exit 0
+          head=$(jq -r .head.sha <<<"$pr")
+          branch=$(jq -r .head.ref <<<"$pr")
+          case "$GITHUB_EVENT_NAME:$branch:$head" in
+            pull_request_target:ordinary:618e24b02e7f02cb6950a3fb5789750d5d54d94c) reason='Ordinary synthetic fixture matched.' ;;
+            issue_comment:escalated:3aa6becd1f421585fba40f7f5c4478b47fa2215a)
+              cmd="/approve-escalation $head"
+              jq -e --arg cmd "$cmd" '.comment.body == $cmd and .comment.user.id == 6148554' "$GITHUB_EVENT_PATH" >/dev/null || exit 0
+              id=$(jq -er .comment.id "$GITHUB_EVENT_PATH")
+              gh api "repos/$repo/issues/comments/$id" | jq -e --arg cmd "$cmd" --arg issue "https://api.github.com/repos/$repo/issues/$n" '.body == $cmd and .user.id == 6148554 and .issue_url == $issue and .created_at == .updated_at' >/dev/null
+              reason='Maintainer resolved this synthetic escalation.' ;;
+            *) echo 'No qualifying fixture decision.'; exit 0 ;;
+          esac
+          gh api -X POST "repos/$repo/pulls/$n/reviews" -f event=APPROVE -f commit_id="$head" -f body="$reason" --jq '{state,commit_id}'
