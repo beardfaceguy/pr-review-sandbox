@@ -30,9 +30,9 @@ jobs:
             pull_request_target:ordinary:618e24b02e7f02cb6950a3fb5789750d5d54d94c) reason='Ordinary synthetic fixture matched.' ;;
             issue_comment:escalated:3aa6becd1f421585fba40f7f5c4478b47fa2215a)
               cmd="/approve-escalation $head"
-              jq -e --arg cmd "$cmd" '.comment.body == $cmd and .comment.user.id == 6148554' "$GITHUB_EVENT_PATH" >/dev/null || exit 0
+              jq -e --arg cmd "$cmd" '(.comment.body | gsub("\\A[[:space:]]+|[[:space:]]+\\z"; "")) == $cmd and .comment.user.id == 6148554' "$GITHUB_EVENT_PATH" >/dev/null || exit 0
               id=$(jq -er .comment.id "$GITHUB_EVENT_PATH")
-              gh api "repos/$repo/issues/comments/$id" | jq -e --arg cmd "$cmd" --arg issue "https://api.github.com/repos/$repo/issues/$n" '.body == $cmd and .user.id == 6148554 and .issue_url == $issue and .created_at == .updated_at' >/dev/null
+              gh api "repos/$repo/issues/comments/$id" | jq -e --arg cmd "$cmd" --arg issue "https://api.github.com/repos/$repo/issues/$n" '(.body | gsub("\\A[[:space:]]+|[[:space:]]+\\z"; "")) == $cmd and .user.id == 6148554 and .issue_url == $issue and .created_at == .updated_at' >/dev/null
               reason='Maintainer resolved this synthetic escalation.' ;;
             *) echo 'No qualifying fixture decision.'; exit 0 ;;
           esac
